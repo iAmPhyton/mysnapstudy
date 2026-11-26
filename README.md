@@ -1,4 +1,4 @@
-# SnapStudy 📸📚
+# SnapStudy
 > **Snap a photo. Master the subject. AI study packs in seconds.**
 
 SnapStudy is an intelligent, cross-platform study companion built with Flutter, Firebase, and Gemini Multimodal AI. SnapStudy transforms photos of handwritten notes, textbook pages, and lecture slides into an all-in-one interactive study deck: **Executive Summaries**, **Structured Markdown Notes**, **Active Recall Flashcards**, and **Self-Grading Quizzes**.
@@ -10,7 +10,7 @@ SnapStudy is an intelligent, cross-platform study companion built with Flutter, 
 
 ---
 
-## 🌟 Value Proposition
+## Value Proposition
 
 Active recall and spaced repetition are scientifically proven to be the most effective study methods. However, manually transcribing notes into flashcards, creating summaries, and authoring practice test questions takes hours—often 3 to 4 times longer than the actual study session itself. Over 80% of students fall back on passive rereading, the least effective study technique.
 
@@ -22,7 +22,7 @@ Active recall and spaced repetition are scientifically proven to be the most eff
 
 ---
 
-## 🧠 Firebase AI Logic Integration (Runtime Architecture)
+## Firebase AI Logic Integration (Runtime Architecture)
 
 SnapStudy demonstrates the direct runtime use of **Firebase AI Logic** via the official `package:firebase_ai` SDK.
 
@@ -72,7 +72,7 @@ The app pairs this with `gemini_service.dart` in a dual-engine architecture, ens
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```mermaid
 graph TD
@@ -95,7 +95,7 @@ graph TD
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 snapstudy/
@@ -135,7 +135,7 @@ snapstudy/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Prerequisites
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) (>= 3.24.0)
@@ -164,6 +164,6 @@ flutter build web --dart-define=GEMINI_API_KEY="your-gemini-api-key"
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the **Apache License, Version 2.0** - see the [LICENSE](LICENSE) file for details.
