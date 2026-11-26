@@ -112,6 +112,25 @@ void main() {
       expect(hint.title, contains('Draft Insight'));
       expect(hint.text, contains('catalyst'));
     });
+
+    test('Generates complete offline study pack on-device without cloud', () async {
+      final pack = await nanoService.generateOfflineStudyPack(
+        title: 'Cellular Respiration & Energy',
+      );
+
+      expect(pack['summary'], isNotEmpty);
+      expect(pack['notes'], contains('# Cellular Respiration & Energy'));
+      expect(pack['flashcards'], isList);
+      expect((pack['flashcards'] as List).length, greaterThanOrEqualTo(5));
+      expect(pack['quiz'], isList);
+      expect((pack['quiz'] as List).length, greaterThanOrEqualTo(4));
+
+      final firstQuiz = (pack['quiz'] as List).first as Map<String, dynamic>;
+      expect(firstQuiz['sampleAnswer'], isNotEmpty);
+      expect(firstQuiz['keyConcepts'], isList);
+      expect(firstQuiz['hints'], isList);
+      expect((firstQuiz['hints'] as List).length, equals(3));
+    });
   });
 
   group('StudyMaterial Quiz Model Backwards Compatibility', () {

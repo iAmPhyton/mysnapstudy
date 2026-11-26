@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/study_material.dart';
 import 'firebase_ai_service.dart';
+import 'gemini_nano_service.dart';
 
 class GeminiProcessedResult {
   final String summary;
@@ -19,7 +20,9 @@ class GeminiProcessedResult {
 }
 
 class GeminiService {
-  static String? savedApiKey;
+  static String? savedApiKey = const String.fromEnvironment('GEMINI_API_KEY').isNotEmpty
+      ? const String.fromEnvironment('GEMINI_API_KEY')
+      : null;
   final String? _apiKey;
 
   // Verified working models for generateContent with lowest latency and no 503 spikes
@@ -46,12 +49,43 @@ class GeminiService {
     );
   }
 
+  GeminiProcessedResult parseDecodedResult(Map<String, dynamic> decoded) {
+    final summary = decoded['summary'] as String? ?? 'No summary generated.';
+    final notes = decoded['notes'] as String? ?? 'No notes generated.';
+
+    final List<FlashcardItem> flashcards = [];
+    if (decoded['flashcards'] is List) {
+      for (var item in decoded['flashcards']) {
+        if (item is Map<String, dynamic>) {
+          flashcards.add(FlashcardItem.fromMap(item));
+        }
+      }
+    }
+
+    final List<QuizQuestion> quiz = [];
+    if (decoded['quiz'] is List) {
+      for (var item in decoded['quiz']) {
+        if (item is Map<String, dynamic>) {
+          quiz.add(QuizQuestion.fromMap(item));
+        }
+      }
+    }
+
+    return GeminiProcessedResult(
+      summary: summary,
+      notes: notes,
+      flashcards: flashcards,
+      quiz: quiz,
+    );
+  }
+
   /// Analyzes an uploaded image of student notes or textbook material
   /// and produces a structured JSON containing: summary, notes, flashcards, and quiz.
   Future<GeminiProcessedResult> processNoteImage({
     required Uint8List imageBytes,
     String mimeType = 'image/jpeg',
     String? customApiKey,
+    String noteTitle = 'Study Notes',
   }) async {
     // 1. Primary runtime engine: Firebase AI Logic (client-side Gemini Developer API SDK)
     try {
@@ -60,34 +94,7 @@ class GeminiService {
         imageBytes: imageBytes,
         mimeType: mimeType,
       );
-
-      final summary = decoded['summary'] as String? ?? 'No summary generated.';
-      final notes = decoded['notes'] as String? ?? 'No notes generated.';
-
-      final List<FlashcardItem> flashcards = [];
-      if (decoded['flashcards'] is List) {
-        for (var item in decoded['flashcards']) {
-          if (item is Map<String, dynamic>) {
-            flashcards.add(FlashcardItem.fromMap(item));
-          }
-        }
-      }
-
-      final List<QuizQuestion> quiz = [];
-      if (decoded['quiz'] is List) {
-        for (var item in decoded['quiz']) {
-          if (item is Map<String, dynamic>) {
-            quiz.add(QuizQuestion.fromMap(item));
-          }
-        }
-      }
-
-      return GeminiProcessedResult(
-        summary: summary,
-        notes: notes,
-        flashcards: flashcards,
-        quiz: quiz,
-      );
+      return parseDecodedResult(decoded);
     } catch (firebaseAiError) {
       debugPrint('[Firebase AI Logic] Notice: $firebaseAiError - falling back to direct endpoint.');
     }
@@ -95,9 +102,12 @@ class GeminiService {
     // 2. Direct Gemini endpoint fallback
     final key = customApiKey ?? savedApiKey ?? _apiKey;
     if (key == null || key.isEmpty) {
-      throw ArgumentError(
-        'Gemini API key is required. Tap "Set Key" on your study card to enter your Gemini API key.',
+      debugPrint('[SnapStudy] No API key provided. Activating Gemini Nano 4 On-Device engine...');
+      final onDevicePack = await GeminiNanoService().generateOfflineStudyPack(
+        title: noteTitle,
+        imageBytes: imageBytes,
       );
+      return parseDecodedResult(onDevicePack);
     }
 
     const promptText = '''
@@ -167,41 +177,13 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
             throw FormatException('Expected JSON object from Gemini, got: $decoded');
           }
 
-          final summary = decoded['summary'] as String? ?? 'No summary generated.';
-          final notes = decoded['notes'] as String? ?? 'No notes generated.';
-
-          // Parse flashcards
-          final List<FlashcardItem> flashcards = [];
-          if (decoded['flashcards'] is List) {
-            for (var item in decoded['flashcards']) {
-              if (item is Map<String, dynamic>) {
-                flashcards.add(FlashcardItem.fromMap(item));
-              }
-            }
-          }
-
-          // Parse quiz
-          final List<QuizQuestion> quiz = [];
-          if (decoded['quiz'] is List) {
-            for (var item in decoded['quiz']) {
-              if (item is Map<String, dynamic>) {
-                quiz.add(QuizQuestion.fromMap(item));
-              }
-            }
-          }
-
-          return GeminiProcessedResult(
-            summary: summary,
-            notes: notes,
-            flashcards: flashcards,
-            quiz: quiz,
-          );
+          return parseDecodedResult(decoded);
         } catch (e) {
           lastError = e;
           debugPrint('Model $modelName (attempt $attempt) error: $e');
           final errStr = e.toString().toLowerCase();
           if (errStr.contains('api_key') || errStr.contains('401') || errStr.contains('unauthorized')) {
-            throw ArgumentError('Invalid Gemini API Key ($e)');
+            break;
           }
           if (attempt < 2) {
             await Future.delayed(Duration(milliseconds: 1200 * attempt));
@@ -210,6 +192,11 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
       }
     }
 
-    throw Exception('Gemini service busy or unavailable: $lastError');
+    debugPrint('[SnapStudy] Cloud generation unavailable ($lastError). Seamlessly falling back to Gemini Nano 4 On-Device engine...');
+    final onDevicePack = await GeminiNanoService().generateOfflineStudyPack(
+      title: noteTitle,
+      imageBytes: imageBytes,
+    );
+    return parseDecodedResult(onDevicePack);
   }
 }

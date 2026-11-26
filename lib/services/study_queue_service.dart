@@ -200,11 +200,12 @@ class StudyQueueService extends ChangeNotifier {
       );
       await _firestoreService.saveStudyMaterial(processingMaterial);
 
-      // 2. Call Gemini service
+      // 2. Call Gemini service (Cloud Gemini Flash with Gemini Nano 4 On-Device fallback)
       final result = await _geminiService.processNoteImage(
         imageBytes: task.imageBytes,
         mimeType: task.mimeType,
         customApiKey: task.customApiKey,
+        noteTitle: task.title,
       );
 
       // 3. Success! Save completed material to Firestore
