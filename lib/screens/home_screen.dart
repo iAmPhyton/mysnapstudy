@@ -493,8 +493,16 @@ class HomeScreen extends StatelessWidget {
                     _buildBadge(context, '${item.flashcards.length} Cards',
                         Icons.style_rounded),
                     const SizedBox(width: 8),
-                    _buildBadge(context, '${item.quiz.length} Questions',
+                    _buildBadge(context, '${item.quiz.length} Qs',
                         Icons.quiz_rounded),
+                    const SizedBox(width: 8),
+                    _buildCustomBadge(
+                      context,
+                      'Nano 4 Offline',
+                      Icons.bolt_rounded,
+                      Colors.green.shade800,
+                      Colors.green.shade100,
+                    ),
                   ] else if (item.isProcessing) ...[
                     _buildCustomBadge(
                       context,

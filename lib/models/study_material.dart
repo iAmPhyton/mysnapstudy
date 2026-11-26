@@ -29,12 +29,18 @@ class QuizQuestion {
   final List<String> options;
   final int correctAnswerIndex;
   final String explanation;
+  final String sampleAnswer;
+  final List<String> keyConcepts;
+  final List<String> hints;
 
   QuizQuestion({
     required this.question,
     required this.options,
     required this.correctAnswerIndex,
     required this.explanation,
+    this.sampleAnswer = '',
+    this.keyConcepts = const [],
+    this.hints = const [],
   });
 
   factory QuizQuestion.fromMap(Map<String, dynamic> map) {
@@ -43,11 +49,36 @@ class QuizQuestion {
     if (rawOptions is List) {
       parsedOptions = rawOptions.map((e) => e.toString()).toList();
     }
+
+    final rawKeyConcepts = map['keyConcepts'];
+    List<String> parsedKeyConcepts = [];
+    if (rawKeyConcepts is List) {
+      parsedKeyConcepts = rawKeyConcepts.map((e) => e.toString()).toList();
+    }
+
+    final rawHints = map['hints'];
+    List<String> parsedHints = [];
+    if (rawHints is List) {
+      parsedHints = rawHints.map((e) => e.toString()).toList();
+    }
+
+    final correctIdx = (map['correctAnswerIndex'] as num?)?.toInt() ?? 0;
+    final defaultSample = parsedOptions.isNotEmpty &&
+            correctIdx >= 0 &&
+            correctIdx < parsedOptions.length
+        ? parsedOptions[correctIdx]
+        : (map['explanation'] as String? ?? '');
+
     return QuizQuestion(
       question: map['question'] as String? ?? '',
       options: parsedOptions,
-      correctAnswerIndex: (map['correctAnswerIndex'] as num?)?.toInt() ?? 0,
+      correctAnswerIndex: correctIdx,
       explanation: map['explanation'] as String? ?? '',
+      sampleAnswer: (map['sampleAnswer'] as String?)?.isNotEmpty == true
+          ? map['sampleAnswer'] as String
+          : defaultSample,
+      keyConcepts: parsedKeyConcepts,
+      hints: parsedHints,
     );
   }
 
@@ -57,8 +88,53 @@ class QuizQuestion {
       'options': options,
       'correctAnswerIndex': correctAnswerIndex,
       'explanation': explanation,
+      if (sampleAnswer.isNotEmpty) 'sampleAnswer': sampleAnswer,
+      if (keyConcepts.isNotEmpty) 'keyConcepts': keyConcepts,
+      if (hints.isNotEmpty) 'hints': hints,
     };
   }
+}
+
+enum NanoEvaluationStatus { correct, partial, incorrect }
+
+class ShortAnswerEvaluation {
+  final NanoEvaluationStatus status;
+  final int score; // 0 to 100
+  final String feedback;
+  final List<String> identifiedConcepts;
+  final List<String> missingConcepts;
+  final String modelUsed;
+  final int latencyMs;
+  final bool isOffline;
+
+  ShortAnswerEvaluation({
+    required this.status,
+    required this.score,
+    required this.feedback,
+    required this.identifiedConcepts,
+    required this.missingConcepts,
+    required this.modelUsed,
+    required this.latencyMs,
+    required this.isOffline,
+  });
+
+  bool get isCorrect => status == NanoEvaluationStatus.correct;
+  bool get isPartial => status == NanoEvaluationStatus.partial;
+  bool get isIncorrect => status == NanoEvaluationStatus.incorrect;
+}
+
+class StudyHint {
+  final int level; // 1 = Socratic Nudge, 2 = Key Concept / Clue, 3 = Structural Guide
+  final String text;
+  final String title;
+  final bool isPersonalized;
+
+  StudyHint({
+    required this.level,
+    required this.text,
+    required this.title,
+    this.isPersonalized = false,
+  });
 }
 
 class StudyMaterial {

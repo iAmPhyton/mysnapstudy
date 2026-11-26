@@ -46,11 +46,17 @@ You MUST respond with a single valid JSON object containing EXACTLY these top-le
    - "front": A concise question, term, or prompt
    - "back": A clear, accurate answer or definition
    (Generate between 5 to 10 high-yield flashcards)
-4. "quiz": An array of multiple-choice question objects, where each object has:
+4. "quiz": An array of quiz question objects designed for both multiple-choice and offline on-device short-answer evaluation, where each object has:
    - "question": The question text
    - "options": An array of exactly 4 plausible choices (strings)
    - "correctAnswerIndex": Integer (0, 1, 2, or 3) indicating the zero-based index of the correct option
    - "explanation": A helpful 1-2 sentence explanation of why the correct option is right
+   - "sampleAnswer": An exemplary short-answer sentence answering the question completely for on-device recall evaluation
+   - "keyConcepts": An array of 2 to 4 essential keywords or concept phrases that a student's short answer must address
+   - "hints": An array of exactly 3 progressive hints:
+     * Hint 1: A conceptual Socratic nudge that doesn't spoil the answer
+     * Hint 2: Key terminology, mechanism, or clue
+     * Hint 3: Structural breakdown or guiding formula
    (Generate between 4 to 8 questions)
 
 Ensure the output is strictly valid JSON without markdown fences.

@@ -21,7 +21,9 @@ This document outlines the architecture, coding standards, development workflows
   - **Firebase Authentication:** Google Sign-In, reactive state streams
   - **Cloud Firestore:** Document database, user-isolated collection tree (`users/{userId}/**`)
   - **Cloud Storage:** Photo storage under `users/{userId}/notes/`
-  - **Gemini API:** Multimodal AI (`gemini-1.5-flash`) for structured study pack extraction
+  - **Gemini API & Hybrid Edge AI:**
+    - **Cloud Ingestion:** Gemini Flash (`gemini-flash-lite-latest` / `gemini-3.5-flash-lite`) via Firebase AI Logic and Google Generative AI for heavy multimodal note processing and study pack extraction.
+    - **On-Device Offline Edge:** Gemini Nano 4 (`GeminiNanoService`) for sub-100ms offline short-answer evaluation, semantic rubric grading, and interactive progressive scaffolding hints during commutes.
 - **State Management:** Provider / StreamBuilder
 - **Package Manager:** `flutter pub`
 
