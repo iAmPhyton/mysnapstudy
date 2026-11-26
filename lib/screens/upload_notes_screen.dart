@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -86,7 +87,7 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
     try {
       final noteId = const Uuid().v4();
 
-      // 1. Upload photo to Cloudflare Storage / Base64 fallback
+      // 1. Upload photo to Cloudflare Storage / Base64 fallback (instant offline fallback)
       String downloadUrl = '';
       try {
         downloadUrl = await _storageService.uploadNotePhoto(
@@ -94,7 +95,14 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
           imageBytes: _selectedImageBytes!,
         );
       } catch (storageError) {
-        debugPrint('Cloudflare storage notice: $storageError');
+        debugPrint('Storage notice: $storageError');
+        final base64String = base64Encode(_selectedImageBytes!);
+        downloadUrl = 'data:image/jpeg;base64,$base64String';
+      }
+
+      if (downloadUrl.isEmpty) {
+        final base64String = base64Encode(_selectedImageBytes!);
+        downloadUrl = 'data:image/jpeg;base64,$base64String';
       }
 
       final customKey = _apiKeyController.text.trim().isNotEmpty
@@ -116,11 +124,11 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
           SnackBar(
             content: Row(
               children: const [
-                Icon(Icons.bolt_rounded, color: Colors.amber),
+                Icon(Icons.offline_pin_rounded, color: Colors.greenAccent),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Notes queued! Gemini AI is generating your study deck in the background.',
+                    'Notes staged! Saved safely on device and queued for AI generation.',
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -169,6 +177,45 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Offline Commuter Snapping Mode Badge
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.bolt_rounded, color: Colors.green, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Offline Snapping Active',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green,
+                          ),
+                        ),
+                        Text(
+                          'Capture notes anytime offline or commuting. Notes are safely staged on-device and automatically synced once connected.',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // Cloudflare Storage Badge
             InkWell(
               onTap: () => _openStorageSettings(context),

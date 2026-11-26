@@ -353,22 +353,28 @@ class HomeScreen extends StatelessWidget {
       child: InkWell(
         onTap: () {
           if (item.isPending) {
+            final isOffline = item.errorMessage != null && item.errorMessage!.contains('Offline');
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Row(
                   children: [
-                    const Icon(Icons.hourglass_top_rounded, color: Colors.amber),
+                    Icon(
+                      isOffline ? Icons.offline_pin_rounded : Icons.hourglass_top_rounded,
+                      color: isOffline ? Colors.greenAccent : Colors.amber,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        item.isProcessing
-                            ? 'Gemini is currently generating flashcards & quiz for "${item.title}". It will be ready in a moment!'
-                            : '"${item.title}" is queued in background to prevent server overload.',
+                        isOffline
+                            ? '"${item.title}" was captured offline during your commute. Safely staged on device—AI study deck will automatically generate when online.'
+                            : (item.isProcessing
+                                ? 'Gemini is currently generating flashcards & quiz for "${item.title}". It will be ready in a moment!'
+                                : '"${item.title}" is queued in background to prevent server overload.'),
                       ),
                     ),
                   ],
                 ),
-                duration: const Duration(seconds: 3),
+                duration: const Duration(seconds: 4),
               ),
             );
             return;
@@ -514,10 +520,18 @@ class HomeScreen extends StatelessWidget {
                   ] else if (item.isQueued) ...[
                     _buildCustomBadge(
                       context,
-                      'Queued (Paced)',
-                      Icons.hourglass_empty_rounded,
-                      Colors.blue.shade700,
-                      Colors.blue.shade100,
+                      item.errorMessage != null && item.errorMessage!.contains('Offline')
+                          ? 'Offline (Staged)'
+                          : 'Queued (Paced)',
+                      item.errorMessage != null && item.errorMessage!.contains('Offline')
+                          ? Icons.offline_pin_rounded
+                          : Icons.hourglass_empty_rounded,
+                      item.errorMessage != null && item.errorMessage!.contains('Offline')
+                          ? Colors.teal.shade800
+                          : Colors.blue.shade700,
+                      item.errorMessage != null && item.errorMessage!.contains('Offline')
+                          ? Colors.teal.shade100
+                          : Colors.blue.shade100,
                     ),
                   ] else if (item.isFailed) ...[
                     _buildCustomBadge(

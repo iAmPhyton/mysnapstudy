@@ -166,7 +166,7 @@ class StudyMaterial {
     required this.updatedAt,
   });
 
-  bool get isQueued => status == 'queued';
+  bool get isQueued => status == 'queued' || status == 'queued_offline';
   bool get isProcessing => status == 'processing';
   bool get isCompleted => status == 'completed';
   bool get isFailed => status == 'failed';

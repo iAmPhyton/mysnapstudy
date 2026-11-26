@@ -230,9 +230,51 @@ class StudyQueueService extends ChangeNotifier {
       _imageCache.remove(task.noteId);
     } catch (e) {
       debugPrint('[StudyQueue] Error processing note ${task.noteId}: $e');
+      final errorStr = e.toString();
+      final errorLower = errorStr.toLowerCase();
+
+      // Check if error is due to offline connectivity during commutes
+      final isOfflineOrNetwork = errorLower.contains('socketexception') ||
+          errorLower.contains('clientexception') ||
+          errorLower.contains('failed host lookup') ||
+          errorLower.contains('network') ||
+          errorLower.contains('connection') ||
+          errorLower.contains('offline') ||
+          errorLower.contains('xmlhttprequest') ||
+          errorLower.contains('failed to fetch') ||
+          errorLower.contains('unavailable');
+
+      if (isOfflineOrNetwork) {
+        debugPrint('[StudyQueue] Offline detected during commute. Holding note ${task.noteId} in local queue until connected.');
+        final existing = await _firestoreService.getStudyMaterial(task.userId, task.noteId);
+        final rawImg = task.imageUrl.isNotEmpty ? task.imageUrl : (existing?.imageUrl ?? '');
+        final currentImageUrl = _cleanImageUrl(rawImg);
+
+        final offlineStagedMaterial = StudyMaterial(
+          id: task.noteId,
+          userId: task.userId,
+          title: task.title,
+          imageUrl: currentImageUrl,
+          summary: 'Captured offline during commute. Safely staged on device—AI study deck will generate automatically when back online.',
+          notes: existing?.notes ?? '',
+          flashcards: existing?.flashcards ?? [],
+          quiz: existing?.quiz ?? [],
+          status: 'queued',
+          errorMessage: 'Offline: Waiting for network to generate study pack',
+          createdAt: existing?.createdAt ?? DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        await _firestoreService.saveStudyMaterial(offlineStagedMaterial);
+
+        // Keep at front of queue and schedule reconnection check in 8 seconds
+        Future.delayed(const Duration(seconds: 8), () {
+          _queue.addFirst(task);
+          _processNext();
+        });
+        return;
+      }
 
       // Check if eligible for backoff retry (up to 4 retries for traffic spikes / 503)
-      final errorStr = e.toString();
       final isDemandSpike = errorStr.contains('503') ||
           errorStr.contains('high demand') ||
           errorStr.contains('temporarily busy') ||
