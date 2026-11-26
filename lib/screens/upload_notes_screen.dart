@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../services/storage_service.dart';
 import '../services/study_queue_service.dart';
+import '../services/gemini_service.dart';
 import '../widgets/cloudflare_settings_dialog.dart';
 
 class UploadNotesScreen extends StatefulWidget {
@@ -33,6 +34,9 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
     super.initState();
     final defaultTitle = 'Notes - ${DateFormat('MMM d, h:mm a').format(DateTime.now())}';
     _titleController.text = defaultTitle;
+    if (GeminiService.savedApiKey != null && GeminiService.savedApiKey!.isNotEmpty) {
+      _apiKeyController.text = GeminiService.savedApiKey!;
+    }
   }
 
   @override
@@ -108,6 +112,9 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
       final customKey = _apiKeyController.text.trim().isNotEmpty
           ? _apiKeyController.text.trim()
           : null;
+      if (customKey != null) {
+        GeminiService.savedApiKey = customKey;
+      }
 
       // 2. Enqueue into background queue to prevent traffic spikes & blocking
       await StudyQueueService.instance.enqueue(

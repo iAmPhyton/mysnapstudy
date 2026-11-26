@@ -6,6 +6,7 @@ import '../models/study_material.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/study_queue_service.dart';
+import '../services/gemini_service.dart';
 import 'study_view_screen.dart';
 import 'upload_notes_screen.dart';
 
@@ -331,6 +332,12 @@ class HomeScreen extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final dateStr = DateFormat.yMMMd().format(item.createdAt);
 
+    final isKeyNeeded = item.errorMessage != null &&
+        (item.errorMessage!.toLowerCase().contains('api key') ||
+         item.errorMessage!.toLowerCase().contains('api_key') ||
+         item.errorMessage!.toLowerCase().contains('unauthorized') ||
+         item.errorMessage!.toLowerCase().contains('missing gemini api key'));
+
     Color? cardBorderColor;
     if (item.isQueued) {
       cardBorderColor = Colors.blue.withOpacity(0.4);
@@ -536,10 +543,10 @@ class HomeScreen extends StatelessWidget {
                   ] else if (item.isFailed) ...[
                     _buildCustomBadge(
                       context,
-                      'Traffic Spike - Tap to Retry',
-                      Icons.warning_amber_rounded,
-                      colorScheme.error,
-                      colorScheme.errorContainer,
+                      isKeyNeeded ? 'API Key Required' : 'Server Busy - Tap Retry',
+                      isKeyNeeded ? Icons.key_rounded : Icons.warning_amber_rounded,
+                      isKeyNeeded ? Colors.amber.shade900 : colorScheme.error,
+                      isKeyNeeded ? Colors.amber.shade100 : colorScheme.errorContainer,
                     ),
                     const SizedBox(width: 8),
                     InkWell(
@@ -547,17 +554,17 @@ class HomeScreen extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: colorScheme.primary,
+                          color: isKeyNeeded ? Colors.amber.shade800 : colorScheme.primary,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.refresh, size: 14, color: Colors.white),
-                            SizedBox(width: 4),
+                            Icon(isKeyNeeded ? Icons.vpn_key_rounded : Icons.refresh, size: 14, color: Colors.white),
+                            const SizedBox(width: 4),
                             Text(
-                              'Retry',
-                              style: TextStyle(
+                              isKeyNeeded ? 'Set Key' : 'Retry',
+                              style: const TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
@@ -585,7 +592,107 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _promptRetry(BuildContext context, StudyMaterial item) async {
-    final success = await StudyQueueService.instance.retry(item);
+    final isKeyNeeded = item.errorMessage != null &&
+        (item.errorMessage!.toLowerCase().contains('api key') ||
+         item.errorMessage!.toLowerCase().contains('api_key') ||
+         item.errorMessage!.toLowerCase().contains('unauthorized') ||
+         item.errorMessage!.toLowerCase().contains('missing gemini api key'));
+
+    final apiKeyController = TextEditingController(text: GeminiService.savedApiKey ?? '');
+
+    final shouldRetry = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) {
+        final dTheme = Theme.of(dialogCtx);
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(
+                isKeyNeeded ? Icons.key_rounded : Icons.cloud_sync_rounded,
+                color: isKeyNeeded ? Colors.amber.shade800 : dTheme.colorScheme.primary,
+              ),
+              const SizedBox(width: 10),
+              Text(isKeyNeeded ? 'Gemini API Key' : 'Retry AI Generation'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isKeyNeeded
+                    ? 'A Gemini API key is required to run cloud multimodal note processing and study pack generation.'
+                    : 'The cloud AI service encountered temporary traffic or high load. You can retry processing "${item.title}".',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              if (item.errorMessage != null && item.errorMessage!.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: dTheme.colorScheme.errorContainer.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    item.errorMessage!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: dTheme.colorScheme.error,
+                      fontFamily: 'monospace',
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: apiKeyController,
+                decoration: InputDecoration(
+                  labelText: 'Gemini API Key (optional/custom)',
+                  hintText: 'AIzaSy...',
+                  prefixIcon: const Icon(Icons.key_rounded, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  isDense: true,
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Leave blank to use default environment key or enter your free Google AI Studio key.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                final enteredKey = apiKeyController.text.trim();
+                if (enteredKey.isNotEmpty) {
+                  GeminiService.savedApiKey = enteredKey;
+                }
+                Navigator.pop(dialogCtx, true);
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry Now'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldRetry != true || !context.mounted) return;
+
+    final customKey = apiKeyController.text.trim();
+    final success = await StudyQueueService.instance.retry(
+      item,
+      customApiKey: customKey.isNotEmpty ? customKey : null,
+    );
+
     if (context.mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(

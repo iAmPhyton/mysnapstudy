@@ -144,13 +144,13 @@ class StudyQueueService extends ChangeNotifier {
     );
     await _firestoreService.saveStudyMaterial(updated);
 
-    final task = StudyQueueTask(
+        final task = StudyQueueTask(
       noteId: material.id,
       userId: material.userId,
       title: material.title,
       imageBytes: bytes,
       imageUrl: material.imageUrl,
-      customApiKey: customApiKey,
+      customApiKey: customApiKey ?? GeminiService.savedApiKey,
       retryCount: 0,
     );
 
@@ -274,11 +274,43 @@ class StudyQueueService extends ChangeNotifier {
         return;
       }
 
-      // Check if eligible for backoff retry (up to 4 retries for traffic spikes / 503)
-      final isDemandSpike = errorStr.contains('503') ||
-          errorStr.contains('high demand') ||
-          errorStr.contains('temporarily busy') ||
-          errorStr.contains('RESOURCE_EXHAUSTED');
+      // 2. Check if error is missing or invalid API Key
+      final isApiKeyIssue = errorLower.contains('api key') ||
+          errorLower.contains('api_key') ||
+          errorLower.contains('401') ||
+          errorLower.contains('unauthorized');
+
+      if (isApiKeyIssue) {
+        debugPrint('[StudyQueue] API Key required for note ${task.noteId}. Prompting user configuration.');
+        final existing = await _firestoreService.getStudyMaterial(task.userId, task.noteId);
+        final rawImg = task.imageUrl.isNotEmpty ? task.imageUrl : (existing?.imageUrl ?? '');
+        final currentImageUrl = _cleanImageUrl(rawImg);
+
+        final keyRequiredMaterial = StudyMaterial(
+          id: task.noteId,
+          userId: task.userId,
+          title: task.title,
+          imageUrl: currentImageUrl,
+          summary: 'Gemini API key is required to generate this study deck. Tap "Set Key" to enter your key.',
+          notes: existing?.notes ?? '',
+          flashcards: existing?.flashcards ?? [],
+          quiz: existing?.quiz ?? [],
+          status: 'failed',
+          errorMessage: 'API Key Required: Enter your free Gemini API key to generate study materials.',
+          createdAt: existing?.createdAt ?? DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        await _firestoreService.saveStudyMaterial(keyRequiredMaterial);
+        return;
+      }
+
+      // 3. Check if eligible for backoff retry (up to 4 retries for traffic spikes / 503 / 429)
+      final isDemandSpike = errorLower.contains('503') ||
+          errorLower.contains('429') ||
+          errorLower.contains('high demand') ||
+          errorLower.contains('temporarily busy') ||
+          errorLower.contains('rate limit') ||
+          errorLower.contains('resource_exhausted');
 
       if (isDemandSpike && task.retryCount < 4) {
         task.retryCount++;

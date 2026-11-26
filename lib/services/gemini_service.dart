@@ -19,10 +19,15 @@ class GeminiProcessedResult {
 }
 
 class GeminiService {
+  static String? savedApiKey;
   final String? _apiKey;
 
   // Verified working models for generateContent with lowest latency and no 503 spikes
   static const List<String> _candidateModels = [
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite',
     'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
   ];
@@ -88,11 +93,10 @@ class GeminiService {
     }
 
     // 2. Direct Gemini endpoint fallback
-    final key = customApiKey ?? _apiKey;
+    final key = customApiKey ?? savedApiKey ?? _apiKey;
     if (key == null || key.isEmpty) {
       throw ArgumentError(
-        'Gemini API key is required. Provide it via const String.fromEnvironment("GEMINI_API_KEY") '
-        'or enter it in the app.',
+        'Gemini API key is required. Tap "Set Key" on your study card to enter your Gemini API key.',
       );
     }
 
@@ -195,6 +199,10 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
         } catch (e) {
           lastError = e;
           debugPrint('Model $modelName (attempt $attempt) error: $e');
+          final errStr = e.toString().toLowerCase();
+          if (errStr.contains('api_key') || errStr.contains('401') || errStr.contains('unauthorized')) {
+            throw ArgumentError('Invalid Gemini API Key ($e)');
+          }
           if (attempt < 2) {
             await Future.delayed(Duration(milliseconds: 1200 * attempt));
           }
@@ -202,6 +210,6 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
       }
     }
 
-    throw Exception('Gemini service is temporarily busy. Please tap "Generate" again in a few moments ($lastError)');
+    throw Exception('Gemini service busy or unavailable: $lastError');
   }
 }
