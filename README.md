@@ -1,7 +1,7 @@
-# SnapStudy
+# MySnapStudy
 > **Snap a photo. Master the subject. AI study packs in seconds.**
 
-SnapStudy is an intelligent, cross-platform study companion built with Flutter, Firebase, and Gemini Multimodal AI. SnapStudy transforms photos of handwritten notes, textbook pages, and lecture slides into an all-in-one interactive study deck: **Executive Summaries**, **Structured Markdown Notes**, **Active Recall Flashcards**, and **Self-Grading Quizzes**.
+MySnapStudy is an intelligent, cross-platform study companion built with Flutter, Firebase, and Gemini Multimodal AI. SnapStudy transforms photos of handwritten notes, textbook pages, and lecture slides into an all-in-one interactive study deck: **Executive Summaries**, **Structured Markdown Notes**, **Active Recall Flashcards**, and **Self-Grading Quizzes**.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24%2B-02569B?logo=flutter)](https://flutter.dev)
@@ -14,8 +14,8 @@ SnapStudy is an intelligent, cross-platform study companion built with Flutter, 
 
 Active recall and spaced repetition are scientifically proven to be the most effective study methods. However, manually transcribing notes into flashcards, creating summaries, and authoring practice test questions takes hours—often 3 to 4 times longer than the actual study session itself. Over 80% of students fall back on passive rereading, the least effective study technique.
 
-**SnapStudy eliminates this friction entirely:**
-1. **Sub-Second Upload Friction:** Snap a picture and tap "Generate". Notes are queued and stored in under 1 second without blocking your screen.
+**MySnapStudy eliminates this friction entirely:**
+1. **Sub-Second Upload Friction:** Snap a picture of ANY note and tap "Generate". Notes are queued and stored on-device without blocking your screen.
 2. **4-in-1 Study Ecosystem:** A single photo generates an Executive Summary, formatted Markdown study notes, flip flashcards, and an auto-graded quiz with explanations.
 3. **Resilient Background Queue:** Built-in sequential rate pacing (2.5s intervals) and automatic exponential backoff retry (`4s`, `8s`, `16s`, `32s`) gracefully absorb API 503 traffic spikes without failing.
 4. **Zero-Setup Cloud Storage:** Multi-provider storage supporting Cloudflare R2 (zero egress fees) and instant embedded fallbacks.
@@ -24,7 +24,7 @@ Active recall and spaced repetition are scientifically proven to be the most eff
 
 ## Firebase AI Logic Integration (Runtime Architecture)
 
-SnapStudy demonstrates the direct runtime use of **Firebase AI Logic** via the official `package:firebase_ai` SDK.
+MySnapStudy demonstrates the direct runtime use of **Firebase AI Logic** via the official `package:firebase_ai` SDK.
 
 ### How It Is Imported & Called at Runtime:
 In [`lib/services/firebase_ai_service.dart`](lib/services/firebase_ai_service.dart), the application interfaces directly with the Firebase AI client SDK:
@@ -70,9 +70,9 @@ class FirebaseAIService {
 
 The app pairs this with `gemini_service.dart` in a dual-engine architecture, ensuring maximum availability across both Firebase AI Logic client SDKs and direct Gemini developer endpoints.
 
-## ⚡ Gemini Nano 4 On-Device: Offline Commuter Recall & Study Hints
+## Gemini Nano 4 On-Device: Offline Commuter Recall & Study Hints
 
-SnapStudy implements a **hybrid cloud-and-edge AI architecture**:
+MySnapStudy implements a **hybrid cloud-and-edge AI architecture**:
 - **Cloud Heavy Ingestion:** Heavy multimodal note photo parsing, high-resolution OCR, lecture synthesis, structured markdown generation, flashcard extraction, and initial quiz authoring run in the cloud using **Gemini Flash** via `FirebaseAIService` and `GeminiService`.
 - **On-Device Offline Edge (`GeminiNanoService`):** High-frequency active recall evaluations and interactive hints run 100% locally on-device using **Gemini Nano 4** (AICore / on-device neural edge runtime).
 
@@ -113,14 +113,14 @@ SnapStudy implements a **hybrid cloud-and-edge AI architecture**:
 
 ```mermaid
 graph TD
-    A[Student Snaps Note Photo] --> B[SnapStudy Flutter App]
+    A[Student Snaps Note Photo] --> B[MySnapStudy Flutter App]
     B -->|Non-Blocking Enqueue| Q[StudyQueueService]
     Q -->|Paced Cloud Ingestion| FAI[Firebase AI Logic / Gemini Flash]
     FAI -->|Structured Study Pack & Nano Rubrics| Q
     Q -->|Persist Completed Deck| FS[Cloud Firestore: users/{userId}/notes]
     B -->|Reactive Real-Time Stream| FS
     B -->|Photo Asset Storage| R2[Cloudflare R2 / Free Tier Storage]
-    B -->|Offline Short-Answer Evaluation| NANO[⚡ Gemini Nano 4 On-Device AICore]
+    B -->|Offline Short-Answer Evaluation| NANO[Gemini Nano 4 On-Device AICore]
     B -->|Interactive Progressive Hints| NANO
     U[Google Sign-In] --> FA[Firebase Authentication]
     FA -->|Strict Owner Isolation| SR[Firestore Security Rules]
@@ -138,7 +138,7 @@ graph TD
 ## Repository Structure
 
 ```
-snapstudy/
+mysnapstudy/
 ├── LICENSE                         # Apache License 2.0
 ├── README.md                       # Comprehensive project documentation
 ├── firebase.json                   # Firebase deployment configuration
@@ -198,7 +198,7 @@ npx -y firebase-tools@latest deploy --only firestore:rules --project snapstudy-h
 ### 4. Run the Application
 Run in your browser or target device:
 ```bash
-# Run on Web (Chrome)
+# Run on Web (Edge)
 flutter run -d chrome --dart-define=GEMINI_API_KEY="your-gemini-api-key"
 
 # Or build the production web bundle
