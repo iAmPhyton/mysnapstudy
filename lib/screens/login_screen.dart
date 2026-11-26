@@ -65,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 28),
                 Text(
-                  'SnapStudy',
+                  'MySnapStudy',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,

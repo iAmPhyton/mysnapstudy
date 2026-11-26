@@ -35,7 +35,7 @@ class SnapStudyApp extends StatelessWidget {
         Provider(create: (_) => FirestoreService()),
       ],
       child: MaterialApp(
-        title: 'SnapStudy',
+        title: 'MySnapStudy',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,

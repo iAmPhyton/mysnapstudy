@@ -21,7 +21,6 @@ class UploadNotesScreen extends StatefulWidget {
 class _UploadNotesScreenState extends State<UploadNotesScreen> {
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _apiKeyController = TextEditingController();
   final StorageService _storageService = StorageService();
 
   Uint8List? _selectedImageBytes;
@@ -34,15 +33,11 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
     super.initState();
     final defaultTitle = 'Notes - ${DateFormat('MMM d, h:mm a').format(DateTime.now())}';
     _titleController.text = defaultTitle;
-    if (GeminiService.savedApiKey != null && GeminiService.savedApiKey!.isNotEmpty) {
-      _apiKeyController.text = GeminiService.savedApiKey!;
-    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -109,13 +104,6 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
         downloadUrl = 'data:image/jpeg;base64,$base64String';
       }
 
-      final customKey = _apiKeyController.text.trim().isNotEmpty
-          ? _apiKeyController.text.trim()
-          : null;
-      if (customKey != null) {
-        GeminiService.savedApiKey = customKey;
-      }
-
       // 2. Enqueue into background queue to prevent traffic spikes & blocking
       await StudyQueueService.instance.enqueue(
         noteId: noteId,
@@ -123,7 +111,7 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
         title: title,
         imageBytes: _selectedImageBytes!,
         imageUrl: downloadUrl,
-        customApiKey: customKey,
+        customApiKey: GeminiService.savedApiKey,
       );
 
       if (mounted) {
@@ -170,7 +158,7 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Snap Study Notes'),
+        title: const Text('MySnapStudy Notes'),
         actions: [
           IconButton(
             tooltip: 'Storage Settings',
@@ -223,37 +211,7 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
               ),
             ),
 
-            // Cloudflare Storage Badge
-            InkWell(
-              onTap: () => _openStorageSettings(context),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.cloud_done_rounded, color: Colors.deepOrange, size: 18),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Storage: Cloudflare R2 (Free Tier Enabled)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.deepOrange,
-                        ),
-                      ),
-                    ),
-                    const Icon(Icons.settings_outlined, color: Colors.deepOrange, size: 16),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
             // Title input
             TextField(
@@ -261,21 +219,6 @@ class _UploadNotesScreenState extends State<UploadNotesScreen> {
               decoration: InputDecoration(
                 labelText: 'Study Set Title',
                 prefixIcon: const Icon(Icons.title_rounded),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Optional Gemini API Key field
-            TextField(
-              controller: _apiKeyController,
-              obscureText: true,
-              decoration: InputDecoration(
-                labelText: 'Gemini API Key (Optional / Overrides env)',
-                hintText: 'Enter API key or use project default',
-                prefixIcon: const Icon(Icons.key_rounded),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),

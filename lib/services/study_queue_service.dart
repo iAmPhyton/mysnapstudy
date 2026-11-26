@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/study_material.dart';
 import 'firestore_service.dart';
 import 'gemini_service.dart';
@@ -35,12 +36,16 @@ class StudyQueueService extends ChangeNotifier {
   factory StudyQueueService() => _instance;
   static StudyQueueService get instance => _instance;
 
-  StudyQueueService._internal();
+  StudyQueueService._internal() {
+    _startAutoSyncTimer();
+  }
 
   final Queue<StudyQueueTask> _queue = Queue<StudyQueueTask>();
   final Map<String, Uint8List> _imageCache = <String, Uint8List>{};
+  final Map<String, StudyQueueTask> _pendingOfflineSyncTasks = <String, StudyQueueTask>{};
   final GeminiService _geminiService = GeminiService();
   final FirestoreService _firestoreService = FirestoreService();
+  Timer? _autoSyncTimer;
 
   bool _isProcessing = false;
   String? _currentlyProcessingId;
@@ -104,8 +109,57 @@ class StudyQueueService extends ChangeNotifier {
     _processNext();
   }
 
-  /// Re-enqueues a failed note
-  Future<bool> retry(StudyMaterial material, {String? customApiKey}) async {
+  /// Starts periodic background timer to automatically sync offline-staged notes once online
+  void _startAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _checkAndAutoSyncPending();
+    });
+  }
+
+  /// Automatically checks for internet connectivity and upgrades offline-generated notes with cloud vision
+  Future<void> _checkAndAutoSyncPending() async {
+    if (_pendingOfflineSyncTasks.isEmpty || _isProcessing) return;
+
+    bool isOnline = true;
+    try {
+      if (kIsWeb) {
+        // On web, ping same-origin to avoid CORS blocking
+        final uri = Uri.base.resolve('index.html');
+        final res = await http.head(uri).timeout(const Duration(seconds: 3));
+        isOnline = res.statusCode >= 200 && res.statusCode < 400;
+      } else {
+        final res = await http.get(Uri.parse('https://clients3.google.com/generate_204')).timeout(const Duration(seconds: 3));
+        isOnline = res.statusCode == 204;
+      }
+    } catch (_) {
+      isOnline = false;
+    }
+
+    if (!isOnline) return;
+
+    final tasksToSync = List<StudyQueueTask>.from(_pendingOfflineSyncTasks.values);
+    for (final task in tasksToSync) {
+      _pendingOfflineSyncTasks.remove(task.noteId);
+      debugPrint('[StudyQueue] Auto-syncing offline note "${task.title}" (ID: ${task.noteId}) with Gemini Cloud Vision...');
+      _queue.add(task);
+    }
+    notifyListeners();
+    _processNext();
+  }
+
+  /// Manually syncs a note with user-provided image bytes if not present in memory
+  Future<bool> syncWithImageBytes(
+    StudyMaterial material,
+    Uint8List bytes, {
+    String? customApiKey,
+  }) async {
+    _imageCache[material.id] = bytes;
+    return syncWithCloud(material, customApiKey: customApiKey);
+  }
+
+  /// Synchronizes or regenerates a study set with Gemini Cloud Vision
+  Future<bool> syncWithCloud(StudyMaterial material, {String? customApiKey}) async {
     Uint8List? bytes = _imageCache[material.id];
 
     // If not in RAM, try to decode from data URI if present
@@ -122,29 +176,42 @@ class StudyQueueService extends ChangeNotifier {
       }
     }
 
+    // If HTTP URL, fetch bytes
+    if (bytes == null && material.imageUrl.startsWith('http')) {
+      try {
+        final res = await http.get(Uri.parse(material.imageUrl));
+        if (res.statusCode == 200) {
+          bytes = res.bodyBytes;
+          _imageCache[material.id] = bytes;
+        }
+      } catch (e) {
+        debugPrint('[StudyQueue] Error fetching image URL: $e');
+      }
+    }
+
     if (bytes == null) {
-      debugPrint('[StudyQueue] Cannot retry note ${material.id}: photo bytes not available in cache.');
+      debugPrint('[StudyQueue] Cannot sync note ${material.id}: photo bytes not available.');
       return false;
     }
 
-    // Reset status in Firestore to 'queued'
-    final updated = StudyMaterial(
+    // Reset status in Firestore to 'processing'
+    final processing = StudyMaterial(
       id: material.id,
       userId: material.userId,
       title: material.title,
       imageUrl: material.imageUrl,
-      summary: 'Retrying AI study generation in background...',
-      notes: '',
-      flashcards: [],
-      quiz: [],
-      status: 'queued',
+      summary: 'Syncing with Gemini Cloud Vision for full multimodal synthesis...',
+      notes: material.notes,
+      flashcards: material.flashcards,
+      quiz: material.quiz,
+      status: 'processing',
       errorMessage: null,
       createdAt: material.createdAt,
       updatedAt: DateTime.now(),
     );
-    await _firestoreService.saveStudyMaterial(updated);
+    await _firestoreService.saveStudyMaterial(processing);
 
-        final task = StudyQueueTask(
+    final task = StudyQueueTask(
       noteId: material.id,
       userId: material.userId,
       title: material.title,
@@ -154,10 +221,15 @@ class StudyQueueService extends ChangeNotifier {
       retryCount: 0,
     );
 
-    _queue.add(task);
+    _queue.addFirst(task);
     notifyListeners();
     _processNext();
     return true;
+  }
+
+  /// Re-enqueues a failed note
+  Future<bool> retry(StudyMaterial material, {String? customApiKey}) async {
+    return syncWithCloud(material, customApiKey: customApiKey);
   }
 
   String _cleanImageUrl(String? url) {
@@ -209,6 +281,14 @@ class StudyQueueService extends ChangeNotifier {
       );
 
       // 3. Success! Save completed material to Firestore
+      final isOffline = result.isOfflineFallback;
+      if (isOffline) {
+        _pendingOfflineSyncTasks[task.noteId] = task;
+        _startAutoSyncTimer();
+      } else {
+        _pendingOfflineSyncTasks.remove(task.noteId);
+      }
+
       final completedMaterial = StudyMaterial(
         id: task.noteId,
         userId: task.userId,
@@ -219,16 +299,13 @@ class StudyQueueService extends ChangeNotifier {
         flashcards: result.flashcards,
         quiz: result.quiz,
         status: 'completed',
-        errorMessage: null,
+        errorMessage: isOffline ? 'offline_fallback' : null,
         createdAt: existing?.createdAt ?? DateTime.now(),
         updatedAt: DateTime.now(),
       );
 
       await _firestoreService.saveStudyMaterial(completedMaterial);
-      debugPrint('[StudyQueue] Successfully completed note ${task.noteId}!');
-
-      // Free cache memory for completed note
-      _imageCache.remove(task.noteId);
+      debugPrint('[StudyQueue] Successfully completed note ${task.noteId} (OfflineFallback: $isOffline)!');
     } catch (e) {
       debugPrint('[StudyQueue] Error processing note ${task.noteId}: $e');
       final errorStr = e.toString();

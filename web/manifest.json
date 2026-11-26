@@ -1,11 +1,11 @@
 {
-  "name": "SnapStudy",
-  "short_name": "SnapStudy",
+  "name": "MySnapStudy",
+  "short_name": "MySnapStudy",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#0175C2",
   "theme_color": "#0175C2",
-  "description": "SnapStudy - AI-powered study companion.",
+  "description": "MySnapStudy - AI-powered study companion.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false
 }

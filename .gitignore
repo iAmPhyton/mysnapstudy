@@ -36,3 +36,4 @@ coverage/
 
 # Environment and secrets
 .env
+.firebase/

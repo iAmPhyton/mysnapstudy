@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/study_material.dart';
@@ -27,7 +28,7 @@ class HomeScreen extends StatelessWidget {
             Icon(Icons.auto_stories_rounded, color: colorScheme.primary),
             const SizedBox(width: 8),
             const Text(
-              'SnapStudy',
+              'MySnapStudy',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
@@ -445,24 +446,11 @@ class HomeScreen extends StatelessWidget {
                           await firestoreService.deleteStudyMaterial(
                               item.userId, item.id);
                         }
-                      } else if (val == 'retry') {
-                        _promptRetry(context, item);
+                      } else if (val == 'refresh' || val == 'retry') {
+                        _refreshAndSyncNote(context, item);
                       }
                     },
                     itemBuilder: (context) => [
-                      if (item.isFailed)
-                        const PopupMenuItem(
-                          value: 'retry',
-                          child: Row(
-                            children: [
-                              Icon(Icons.refresh_rounded,
-                                  color: Colors.blue, size: 20),
-                              SizedBox(width: 8),
-                              Text('Retry Generation',
-                                  style: TextStyle(color: Colors.blue)),
-                            ],
-                          ),
-                        ),
                       const PopupMenuItem(
                         value: 'delete',
                         child: Row(
@@ -471,6 +459,23 @@ class HomeScreen extends StatelessWidget {
                                 color: Colors.red, size: 20),
                             SizedBox(width: 8),
                             Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'refresh',
+                        child: Row(
+                          children: [
+                            Icon(Icons.refresh_rounded,
+                                color: Colors.blueAccent, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Refresh',
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -511,7 +516,9 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(width: 8),
                     _buildCustomBadge(
                       context,
-                      'Nano 4 Offline',
+                      item.errorMessage == 'offline_fallback'
+                          ? 'Nano 4 Offline (Tap ⋮ to Refresh)'
+                          : 'Nano 4 Offline',
                       Icons.bolt_rounded,
                       Colors.green.shade800,
                       Colors.green.shade100,
@@ -650,7 +657,7 @@ class HomeScreen extends StatelessWidget {
                 controller: apiKeyController,
                 decoration: InputDecoration(
                   labelText: 'Gemini API Key (optional/custom)',
-                  hintText: 'AIzaSy...',
+                  hintText: 'Enter your Gemini API key...',
                   prefixIcon: const Icon(Icons.key_rounded, size: 20),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   isDense: true,
@@ -708,6 +715,76 @@ class HomeScreen extends StatelessWidget {
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
+      }
+    }
+  }
+
+  Future<void> _refreshAndSyncNote(BuildContext context, StudyMaterial item) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Syncing "${item.title}" with Gemini AI...'),
+            ),
+          ],
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+
+    final success = await StudyQueueService.instance.syncWithCloud(
+      item,
+      customApiKey: GeminiService.savedApiKey,
+    );
+
+    if (!success && context.mounted) {
+      final shouldPick = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Re-sync with Gemini AI'),
+          content: Text(
+            'The original photo for "${item.title}" is not cached in local memory. Would you like to select the note photo to re-sync?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.photo_library_rounded),
+              label: const Text('Select Photo & Sync'),
+              onPressed: () => Navigator.pop(ctx, true),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldPick == true && context.mounted) {
+        final picker = ImagePicker();
+        final picked = await picker.pickImage(source: ImageSource.gallery);
+        if (picked != null && context.mounted) {
+          final bytes = await picked.readAsBytes();
+          await StudyQueueService.instance.syncWithImageBytes(
+            item,
+            bytes,
+            customApiKey: GeminiService.savedApiKey,
+          );
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Syncing "${item.title}" with selected photo...'),
+                backgroundColor: Colors.green.shade800,
+              ),
+            );
+          }
+        }
       }
     }
   }

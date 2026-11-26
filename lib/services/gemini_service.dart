@@ -10,12 +10,14 @@ class GeminiProcessedResult {
   final String notes;
   final List<FlashcardItem> flashcards;
   final List<QuizQuestion> quiz;
+  final bool isOfflineFallback;
 
   GeminiProcessedResult({
     required this.summary,
     required this.notes,
     required this.flashcards,
     required this.quiz,
+    this.isOfflineFallback = false,
   });
 }
 
@@ -25,14 +27,11 @@ class GeminiService {
       : null;
   final String? _apiKey;
 
-  // Verified working models for generateContent with lowest latency and no 503 spikes
+  // Verified working models for generateContent with lowest latency and multimodal vision support
   static const List<String> _candidateModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-lite',
     'gemini-flash-lite-latest',
     'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
   ];
 
   GeminiService({String? apiKey})
@@ -49,7 +48,7 @@ class GeminiService {
     );
   }
 
-  GeminiProcessedResult parseDecodedResult(Map<String, dynamic> decoded) {
+  GeminiProcessedResult parseDecodedResult(Map<String, dynamic> decoded, {bool isOfflineFallback = false}) {
     final summary = decoded['summary'] as String? ?? 'No summary generated.';
     final notes = decoded['notes'] as String? ?? 'No notes generated.';
 
@@ -76,6 +75,7 @@ class GeminiService {
       notes: notes,
       flashcards: flashcards,
       quiz: quiz,
+      isOfflineFallback: isOfflineFallback,
     );
   }
 
@@ -94,7 +94,7 @@ class GeminiService {
         imageBytes: imageBytes,
         mimeType: mimeType,
       );
-      return parseDecodedResult(decoded);
+      return parseDecodedResult(decoded, isOfflineFallback: false);
     } catch (firebaseAiError) {
       debugPrint('[Firebase AI Logic] Notice: $firebaseAiError - falling back to direct endpoint.');
     }
@@ -107,7 +107,7 @@ class GeminiService {
         title: noteTitle,
         imageBytes: imageBytes,
       );
-      return parseDecodedResult(onDevicePack);
+      return parseDecodedResult(onDevicePack, isOfflineFallback: true);
     }
 
     const promptText = '''
@@ -177,7 +177,7 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
             throw FormatException('Expected JSON object from Gemini, got: $decoded');
           }
 
-          return parseDecodedResult(decoded);
+          return parseDecodedResult(decoded, isOfflineFallback: false);
         } catch (e) {
           lastError = e;
           debugPrint('Model $modelName (attempt $attempt) error: $e');
@@ -197,6 +197,6 @@ Ensure the output is strictly valid JSON without any leading or trailing markdow
       title: noteTitle,
       imageBytes: imageBytes,
     );
-    return parseDecodedResult(onDevicePack);
+    return parseDecodedResult(onDevicePack, isOfflineFallback: true);
   }
 }
