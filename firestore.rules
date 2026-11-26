@@ -1,0 +1,182 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // This security rules file assumes the following data structures:
+    //
+    // Collection: /users/{userId}
+    // Document ID: userId (matches authenticated Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required, immutable) - Firebase Auth UID
+    //   - email: string (required, valid email pattern, max length: 254)
+    //   - displayName: string (optional, max length: 100)
+    //   - photoUrl: string (optional, max length: 1000)
+    //   - createdAt: timestamp (required, immutable after creation)
+    //   - lastLoginAt: timestamp (optional)
+    //
+    // Collection: /users/{userId}/notes/{noteId}
+    // Document ID: noteId (string, max length: 100)
+    // Fields:
+    //   - id: string (required, immutable, max length: 100) - Matches noteId
+    //   - userId: string (required, immutable) - Matches parent userId and auth UID
+    //   - title: string (required, min length: 1, max length: 200)
+    //   - imageUrl: string (optional, max length: 1000000)
+    //   - summary: string (optional, max length: 20000)
+    //   - notes: string (optional, max length: 50000)
+    //   - flashcards: list of maps (optional, max size: 100)
+    //   - quiz: list of maps (optional, max size: 100)
+    //   - status: string (optional, max length: 50) - 'queued', 'processing', 'completed', 'failed'
+    //   - errorMessage: string (optional, max length: 2000)
+    //   - createdAt: timestamp (required, immutable after creation)
+    //   - updatedAt: timestamp (required)
+    //
+    // Subcollections: /users/{userId}/{allPaths=**}
+    // Any nested subcollections under /users/{userId} restricted strictly
+    // to the authenticated owner.
+    //
+    // ===============================================================
+
+    // Root-level default deny: Deny all read and write access to unmapped paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user is the resource owner (authenticated and matches userId)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate email format
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate required fields exist in data map
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    // Validate only allowed fields exist in data map
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    // Validate optional string field (if present, must be string and within length limits)
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+        (data[field] is string &&
+         data[field].size() >= minLen &&
+         data[field].size() <= maxLen);
+    }
+
+    // Validate optional timestamp field (if present, must be timestamp)
+    function isValidOptionalTimestamp(data, field) {
+      return !(field in data) || data[field] is timestamp;
+    }
+
+    // Validate optional list field (if present, must be list and within size limit)
+    function isValidOptionalList(data, field, maxSize) {
+      return !(field in data) ||
+        (data[field] is list && data[field].size() <= maxSize);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    // Validate user profile schema
+    function isValidUser(data, userId) {
+      return hasRequiredFields(data, ['uid', 'email', 'createdAt']) &&
+        hasOnlyAllowedFields(data, ['uid', 'email', 'displayName', 'photoUrl', 'createdAt', 'lastLoginAt']) &&
+        data.uid is string &&
+        data.uid == userId &&
+        data.uid == request.auth.uid &&
+        isValidEmail(data.email) &&
+        data.email.size() <= 254 &&
+        isValidOptionalString(data, 'displayName', 0, 100) &&
+        isValidOptionalString(data, 'photoUrl', 0, 1000) &&
+        data.createdAt is timestamp &&
+        isValidOptionalTimestamp(data, 'lastLoginAt');
+    }
+
+    // Protect immutable user profile fields on update
+    function areUserImmutableFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'createdAt']) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Validate study notes schema
+    function isValidStudyMaterial(data, noteId, userId) {
+      return hasRequiredFields(data, ['id', 'userId', 'title', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(data, ['id', 'userId', 'title', 'imageUrl', 'summary', 'notes', 'flashcards', 'quiz', 'status', 'errorMessage', 'createdAt', 'updatedAt']) &&
+        data.id is string &&
+        data.id == noteId &&
+        data.id.size() > 0 &&
+        data.id.size() <= 100 &&
+        data.userId is string &&
+        data.userId == userId &&
+        data.userId == request.auth.uid &&
+        data.title is string &&
+        data.title.size() > 0 &&
+        data.title.size() <= 200 &&
+        isValidOptionalString(data, 'imageUrl', 0, 1000000) &&
+        isValidOptionalString(data, 'summary', 0, 20000) &&
+        isValidOptionalString(data, 'notes', 0, 50000) &&
+        isValidOptionalList(data, 'flashcards', 100) &&
+        isValidOptionalList(data, 'quiz', 100) &&
+        isValidOptionalString(data, 'status', 0, 50) &&
+        isValidOptionalString(data, 'errorMessage', 0, 2000) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Protect immutable study notes fields on update
+    function areNoteImmutableFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id', 'userId', 'createdAt']) &&
+        request.resource.data.id == resource.data.id &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // User profile document: /users/{userId}
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data, userId);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data, userId) && areUserImmutableFieldsUnchanged();
+      allow delete: if isOwner(userId);
+
+      // User study notes and materials: /users/{userId}/notes/{noteId}
+      match /notes/{noteId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidStudyMaterial(request.resource.data, noteId, userId);
+        allow update: if isOwner(userId) && isValidStudyMaterial(request.resource.data, noteId, userId) && areNoteImmutableFieldsUnchanged();
+        allow delete: if isOwner(userId);
+      }
+
+      // Catch-all for any other nested subcollections under /users/{userId}/{allPaths=**}
+      match /{allPaths=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}
